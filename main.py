@@ -1,5 +1,3 @@
-"""Punto de entrada principal de la aplicación."""
-
 from interfaz import VentanaPrincipal
 from inventario import Inventario
 
