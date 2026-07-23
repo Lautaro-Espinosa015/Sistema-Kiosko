@@ -66,8 +66,24 @@ class VentanaPrincipal(tk.Tk):
         self.entry_stock = tk.Entry(frame, width=30)
         self.entry_stock.grid(row=4, column=1, padx=5, pady=5)
 
-        boton = tk.Button(frame, text="Agregar producto", command=self._on_agregar_producto)
-        boton.grid(row=5, column=0, columnspan=2, pady=10)
+        # Guardamos la referencia al botón porque su texto cambia
+        # ("Agregar producto" <-> "Actualizar producto") según el modo.
+        self.boton_guardar = tk.Button(
+            frame, text="OK", command=self._on_guardar_producto
+        )
+        self.boton_guardar.grid(row=5, column=0, pady=10)
+
+        self.boton_nuevo = tk.Button(
+            frame, text="Nuevo producto", command=self._on_nuevo_producto
+        )
+        self.boton_nuevo.grid(row=5, column=1, pady=10)
+
+        tk.Label(
+            contenedor,
+            text="Tip: hacé clic en un producto de la tabla para editarlo "
+                 "(por ejemplo, para reponer stock).",
+            fg="gray30",
+        ).pack(anchor="w", padx=10)
 
         columnas = ("codigo", "nombre", "precio", "costo", "stock")
         self.tabla_productos = ttk.Treeview(contenedor, columns=columnas, show="headings")
@@ -78,8 +94,16 @@ class VentanaPrincipal(tk.Tk):
         self.tabla_productos.heading("stock", text="Stock")
         self.tabla_productos.pack(fill="both", expand=True, padx=10, pady=10)
 
-    def _on_agregar_producto(self):
-        """Maneja el evento de agregar un producto al presionar el botón."""
+        # Al seleccionar una fila, disparamos _on_seleccionar_producto
+        self.tabla_productos.bind("<<TreeviewSelect>>", self._on_seleccionar_producto)
+
+    def _on_guardar_producto(self):
+        """
+        Guarda el producto del formulario. Como 'agregar_producto' del
+        inventario sobreescribe si el código ya existe, este mismo método
+        sirve tanto para CREAR un producto nuevo como para ACTUALIZAR uno
+        existente (por ejemplo, para reponer stock).
+        """
         codigo_texto = self.entry_codigo.get().strip()
         nombre = self.entry_nombre.get().strip()
         precio_texto = self.entry_precio.get().strip()
@@ -107,12 +131,56 @@ class VentanaPrincipal(tk.Tk):
         self.inventario.agregar_producto(codigo, nombre, precio, costo, stock)
         self._refrescar_tabla_productos()
         self._refrescar_combo_productos()
+        self._on_nuevo_producto()
 
+    def _on_seleccionar_producto(self, event):
+        """
+        Se dispara al hacer clic en una fila de la tabla de productos.
+        Precarga sus datos en el formulario para editarlos rápido
+        (por ejemplo, para sumar stock sin volver a tipear todo).
+        """
+        seleccion = self.tabla_productos.selection()
+        if not seleccion:
+            return
+
+        valores = self.tabla_productos.item(seleccion[0], "values")
+        codigo = int(valores[0])
+        producto = self.inventario.obtener_producto_por_codigo(codigo)
+
+        # El código se bloquea: es la clave del producto, y si se pudiera
+        # cambiar libremente acá se terminaría creando un producto nuevo
+        # en lugar de editar el existente.
+        self.entry_codigo.config(state="normal")
+        self.entry_codigo.delete(0, tk.END)
+        self.entry_codigo.insert(0, producto.codigo)
+        self.entry_codigo.config(state="disabled")
+
+        self.entry_nombre.delete(0, tk.END)
+        self.entry_nombre.insert(0, producto.nombre)
+
+        self.entry_precio.delete(0, tk.END)
+        self.entry_precio.insert(0, producto.precio)
+
+        self.entry_costo.delete(0, tk.END)
+        self.entry_costo.insert(0, producto.costo)
+
+        self.entry_stock.delete(0, tk.END)
+        self.entry_stock.insert(0, producto.stock)
+
+        self.boton_guardar.config(text="Actualizar producto")
+
+    def _on_nuevo_producto(self):
+        """Limpia el formulario y lo deja listo para cargar un producto nuevo."""
+        self.tabla_productos.selection_remove(self.tabla_productos.selection())
+
+        self.entry_codigo.config(state="normal")
         self.entry_codigo.delete(0, tk.END)
         self.entry_nombre.delete(0, tk.END)
         self.entry_precio.delete(0, tk.END)
         self.entry_costo.delete(0, tk.END)
         self.entry_stock.delete(0, tk.END)
+
+        self.boton_guardar.config(text="OK")
         self.entry_codigo.focus()
 
     def _refrescar_tabla_productos(self):
