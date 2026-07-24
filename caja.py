@@ -1,29 +1,37 @@
-"""Módulo para el procesamiento de transacciones y cálculo de caja."""
+"""Módulo que coordina las ventas del día: valida stock, lo descuenta,
+guarda cada venta y calcula los totales (vendido y ganancia)."""
 
 from inventario import Inventario
 from modelos import Venta
 
 
 class StockInsuficiente(Exception):
-    """Excepción para cuando no hay suficiente stock de un producto."""
+    """Se lanza cuando se intenta vender más cantidad de la que hay en stock."""
+    pass
 
 
 class Caja:
-    """Gestor de ventas y balance financiero."""
+    """
+    Representa la caja del kiosko durante el día.
+    No guarda productos por su cuenta: usa el Inventario que le pasan.
+    """
 
     def __init__(self, inventario: Inventario):
-        """Inicializa la caja conectada a un inventario."""
         self.inventario = inventario
         self._ventas: list[Venta] = []
 
     def registrar_venta(self, codigo: int, cantidad: int) -> Venta:
-        """Procesa una venta y descuenta el stock correspondiente."""
-        # 1. Asignamos el producto devuelto a la variable
-        producto = self.inventario.obtener_producto_por_codigo(codigo)
+        """
+        Registra una venta:
+        1) busca el producto por código,
+        2) valida que haya stock suficiente,
+        3) descuenta el stock,
+        4) guarda la venta y la devuelve.
+        """
+        if not self.inventario.existe(codigo):
+            raise KeyError(f"No existe ningún producto con código {codigo}.")
 
-        # 2. Verificamos si existe y si hay stock
-        if not producto:
-            raise ValueError(f"No existe ningún producto con el código {codigo}.")
+        producto = self.inventario.obtener_producto_por_codigo(codigo)
 
         if producto.stock < cantidad:
             raise StockInsuficiente(
@@ -31,8 +39,8 @@ class Caja:
                 f"Disponible: {producto.stock}, pedido: {cantidad}."
             )
 
-        # 3. Descontamos stock y registramos la venta
         producto.stock -= cantidad
+
         venta = Venta(
             codigo=producto.codigo,
             nombre=producto.nombre,
@@ -43,18 +51,27 @@ class Caja:
         self._ventas.append(venta)
         return venta
 
+    def agregar_venta_existente(self, venta: Venta) -> None:
+        """
+        Agrega una venta que ya había sido validada anteriormente
+        (por ejemplo, al cargar el historial del día desde el Excel).
+        A diferencia de 'registrar_venta', NO vuelve a descontar stock,
+        porque el stock guardado en el Excel ya refleja esa venta.
+        """
+        self._ventas.append(venta)
+
     def obtener_ventas(self) -> list[Venta]:
-        """Devuelve el historial de ventas."""
+        """Devuelve todas las ventas registradas en el día."""
         return list(self._ventas)
 
     def total_vendido(self) -> float:
-        """Suma el dinero total acumulado por ventas."""
+        """Suma de todo lo facturado en el día."""
         return sum(venta.total for venta in self._ventas)
 
     def total_ganancia(self) -> float:
-        """Suma el dinero neta ganado por ventas."""
+        """Suma de toda la ganancia del día (ventas - costos)."""
         return sum(venta.ganancia for venta in self._ventas)
 
     def cantidad_operaciones(self) -> int:
-        """Devuelve la cantidad total de transacciones hechas."""
+        """Cuántas ventas se registraron en el día."""
         return len(self._ventas)

@@ -3,6 +3,7 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+import excel_datos
 from caja import Caja, StockInsuficiente
 from inventario import Inventario
 
@@ -22,7 +23,7 @@ class VentanaPrincipal(tk.Tk):
         self._productos_combo = []
 
         self.title("Kiosko")
-        self.geometry("1366x768")
+        self.geometry("560x480")
 
         notebook = ttk.Notebook(self)
         notebook.pack(fill="both", expand=True)
@@ -38,6 +39,50 @@ class VentanaPrincipal(tk.Tk):
 
         self._crear_tab_productos(tab_productos)
         self._crear_tab_ventas(tab_ventas)
+        self._crear_boton_guardar()
+
+        # Si el usuario cierra la ventana con la X, le preguntamos si
+        # quiere guardar antes de salir (para no perder ventas del día).
+        self.protocol("WM_DELETE_WINDOW", self._on_cerrar_ventana)
+
+    def refrescar_todo(self):
+        """Actualiza tablas y combos. Se usa después de cargar datos del Excel."""
+        self._refrescar_tabla_productos()
+        self._refrescar_tabla_ventas()
+        self._refrescar_combo_productos()
+
+    # ==================================================================
+    # GUARDADO EN EXCEL
+    # ==================================================================
+    def _crear_boton_guardar(self):
+        boton = tk.Button(
+            self,
+            text=f"💾  GUARDAR EN EXCEL  ({excel_datos.NOMBRE_ARCHIVO})",
+            command=self._on_guardar_excel,
+            font=("", 13, "bold"),
+            bg="#2e7d32",
+            fg="white",
+            activebackground="#256428",
+            activeforeground="white",
+            height=2,
+        )
+        boton.pack(side="bottom", fill="x", padx=10, pady=10)
+
+    def _on_guardar_excel(self):
+        excel_datos.guardar_datos(self.inventario, self.caja)
+        messagebox.showinfo(
+            "Guardado", f"Los datos se guardaron en '{excel_datos.NOMBRE_ARCHIVO}'."
+        )
+
+    def _on_cerrar_ventana(self):
+        respuesta = messagebox.askyesnocancel(
+            "Salir", "¿Querés guardar los datos en el Excel antes de salir?"
+        )
+        if respuesta is None:  # Cancelar: no cerrar la ventana
+            return
+        if respuesta:  # Sí: guardar y cerrar
+            excel_datos.guardar_datos(self.inventario, self.caja)
+        self.destroy()
 
     # ==================================================================
     # PESTAÑA: PRODUCTOS
@@ -69,7 +114,7 @@ class VentanaPrincipal(tk.Tk):
         # Guardamos la referencia al botón porque su texto cambia
         # ("Agregar producto" <-> "Actualizar producto") según el modo.
         self.boton_guardar = tk.Button(
-            frame, text="OK", command=self._on_guardar_producto
+            frame, text="Agregar producto", command=self._on_guardar_producto
         )
         self.boton_guardar.grid(row=5, column=0, pady=10)
 
@@ -180,7 +225,7 @@ class VentanaPrincipal(tk.Tk):
         self.entry_costo.delete(0, tk.END)
         self.entry_stock.delete(0, tk.END)
 
-        self.boton_guardar.config(text="OK")
+        self.boton_guardar.config(text="Agregar producto")
         self.entry_codigo.focus()
 
     def _refrescar_tabla_productos(self):
