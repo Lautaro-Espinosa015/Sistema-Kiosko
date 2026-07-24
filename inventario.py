@@ -7,27 +7,29 @@ class Inventario:
     """Clase para gestionar el conjunto de productos."""
 
     def __init__(self):
-        """Inicializa el inventario con un diccionario vacío de productos."""
-        self.productos: dict[str, Producto] = {}
+        """Inicializa el inventario indexado por código."""
+        self.productos: dict[int, Producto] = {}
 
-    def agregar_producto(self, nombre: str, precio: float, stock: int) -> None:
-        """Agrega un nuevo producto al inventario."""
-        self.productos[nombre] = Producto(
-            nombre=nombre, precio=precio, stock=stock
+    def agregar_producto(
+        self, codigo: int, nombre: str, precio: float, costo: float, stock: int
+    ) -> None:
+        """Agrega un nuevo producto con su costo."""
+        self.productos[codigo] = Producto(
+            codigo=codigo,
+            nombre=nombre,
+            precio=precio,
+            costo=costo,
+            stock=stock,
         )
 
-    def existe(self, nombre: str) -> bool:
-        """Verifica si un producto existe en el inventario."""
-        return nombre in self.productos
+    def existe(self, codigo: int) -> bool:
+        """Verifica si un producto existe por su código."""
+        return codigo in self.productos
 
-    def obtener_productos(self, nombre: str) -> Producto:
-        """Obtiene un producto por su nombre."""
-        return self.productos[nombre]
+    def obtener_producto_por_codigo(self, codigo: int) -> Producto | None:
+        """Obtiene un producto por su código."""
+        return self.productos.get(codigo)
 
     def obtener_todos(self) -> list[Producto]:
-        """Devuelve una lista con todos los productos ordenados por nombre."""
+        """Devuelve todos los productos ordenados por nombre."""
         return sorted(self.productos.values(), key=lambda p: p.nombre)
-
-    def nombres(self) -> list[str]:
-        """Devuelve una lista con los nombres de todos los productos."""
-        return list(self.productos.keys())

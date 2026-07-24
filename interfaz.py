@@ -1,92 +1,341 @@
+"""Módulo que contiene la interfaz gráfica con Tkinter."""
+
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import messagebox, ttk
+
+import excel_datos
+from caja import Caja, StockInsuficiente
 from inventario import Inventario
 
 
 class VentanaPrincipal(tk.Tk):
-    """
-    Es la ventana de la aplicación.
-    Hereda de tk.Tk, así que ES la ventana en sí misma.
- 
-    Importante: esta clase NO decide cómo se guardan los productos,
-    solo le pide a "self.inventario" que lo haga. Esa es la idea
-    de separar la interfaz de la lógica.
-    """
- 
-    def __init__(self, inventario: Inventario):
+    """Ventana principal de la aplicación para gestión del kiosko."""
+
+    def __init__(self, inventario: Inventario, caja: Caja):
+        """Inicializa la ventana y sus componentes."""
         super().__init__()
         self.inventario = inventario
- 
-        self.title("Kiosko - Paso 1: Cargar productos")
-        self.geometry("520x420")
- 
-        self._crear_formulario()
-        self._crear_tabla()
- 
-    # ------------------------------------------------------------------
-    # Construcción de la interfaz (métodos "privados", por eso el guion bajo)
-    # ------------------------------------------------------------------
-    def _crear_formulario(self):
-        frame = tk.Frame(self, padx=10, pady=10)
+        self.caja = caja
+
+        # Lista auxiliar: guarda, en orden, los productos que aparecen
+        # en el combobox de la pestaña Ventas. La usamos para traducir
+        # "qué opción eligió el usuario" -> "qué producto es".
+        self._productos_combo = []
+
+        self.title("Kiosko")
+        self.geometry("560x480")
+
+        notebook = ttk.Notebook(self)
+        notebook.pack(fill="both", expand=True)
+
+        tab_productos = tk.Frame(notebook)
+        tab_ventas = tk.Frame(notebook)
+        notebook.add(tab_productos, text="Productos")
+        notebook.add(tab_ventas, text="Ventas")
+
+        # Cuando el usuario hace clic en la pestaña "Ventas", refrescamos
+        # el combobox por si se cargaron productos nuevos mientras tanto.
+        notebook.bind("<<NotebookTabChanged>>", self._on_cambio_pestania)
+
+        self._crear_tab_productos(tab_productos)
+        self._crear_tab_ventas(tab_ventas)
+        self._crear_boton_guardar()
+
+        # Si el usuario cierra la ventana con la X, le preguntamos si
+        # quiere guardar antes de salir (para no perder ventas del día).
+        self.protocol("WM_DELETE_WINDOW", self._on_cerrar_ventana)
+
+    def refrescar_todo(self):
+        """Actualiza tablas y combos. Se usa después de cargar datos del Excel."""
+        self._refrescar_tabla_productos()
+        self._refrescar_tabla_ventas()
+        self._refrescar_combo_productos()
+
+    # ==================================================================
+    # GUARDADO EN EXCEL
+    # ==================================================================
+    def _crear_boton_guardar(self):
+        boton = tk.Button(
+            self,
+            text=f"💾  GUARDAR EN EXCEL  ({excel_datos.NOMBRE_ARCHIVO})",
+            command=self._on_guardar_excel,
+            font=("", 13, "bold"),
+            bg="#2e7d32",
+            fg="white",
+            activebackground="#256428",
+            activeforeground="white",
+            height=2,
+        )
+        boton.pack(side="bottom", fill="x", padx=10, pady=10)
+
+    def _on_guardar_excel(self):
+        excel_datos.guardar_datos(self.inventario, self.caja)
+        messagebox.showinfo(
+            "Guardado", f"Los datos se guardaron en '{excel_datos.NOMBRE_ARCHIVO}'."
+        )
+
+    def _on_cerrar_ventana(self):
+        respuesta = messagebox.askyesnocancel(
+            "Salir", "¿Querés guardar los datos en el Excel antes de salir?"
+        )
+        if respuesta is None:  # Cancelar: no cerrar la ventana
+            return
+        if respuesta:  # Sí: guardar y cerrar
+            excel_datos.guardar_datos(self.inventario, self.caja)
+        self.destroy()
+
+    # ==================================================================
+    # PESTAÑA: PRODUCTOS
+    # ==================================================================
+    def _crear_tab_productos(self, contenedor):
+        frame = tk.Frame(contenedor, padx=10, pady=10)
         frame.pack(fill="x")
- 
-        tk.Label(frame, text="Nombre del producto:").grid(row=0, column=0, sticky="w")
+
+        tk.Label(frame, text="Código:").grid(row=0, column=0, sticky="w")
+        self.entry_codigo = tk.Entry(frame, width=30)
+        self.entry_codigo.grid(row=0, column=1, padx=5, pady=5)
+
+        tk.Label(frame, text="Nombre:").grid(row=1, column=0, sticky="w")
         self.entry_nombre = tk.Entry(frame, width=30)
-        self.entry_nombre.grid(row=0, column=1, padx=5, pady=5)
- 
-        tk.Label(frame, text="Precio:").grid(row=1, column=0, sticky="w")
+        self.entry_nombre.grid(row=1, column=1, padx=5, pady=5)
+
+        tk.Label(frame, text="Precio de venta:").grid(row=2, column=0, sticky="w")
         self.entry_precio = tk.Entry(frame, width=30)
-        self.entry_precio.grid(row=1, column=1, padx=5, pady=5)
- 
-        tk.Label(frame, text="Stock inicial:").grid(row=2, column=0, sticky="w")
+        self.entry_precio.grid(row=2, column=1, padx=5, pady=5)
+
+        tk.Label(frame, text="Costo:").grid(row=3, column=0, sticky="w")
+        self.entry_costo = tk.Entry(frame, width=30)
+        self.entry_costo.grid(row=3, column=1, padx=5, pady=5)
+
+        tk.Label(frame, text="Stock inicial:").grid(row=4, column=0, sticky="w")
         self.entry_stock = tk.Entry(frame, width=30)
-        self.entry_stock.grid(row=2, column=1, padx=5, pady=5)
- 
-        boton = tk.Button(frame, text="Agregar producto", command=self._on_agregar_producto)
-        boton.grid(row=3, column=0, columnspan=2, pady=10)
- 
-    def _crear_tabla(self):
-        columnas = ("nombre", "precio", "stock")
-        self.tabla = ttk.Treeview(self, columns=columnas, show="headings")
-        self.tabla.heading("nombre", text="Producto")
-        self.tabla.heading("precio", text="Precio")
-        self.tabla.heading("stock", text="Stock")
-        self.tabla.pack(fill="both", expand=True, padx=10, pady=10)
- 
-    # ------------------------------------------------------------------
-    # Manejadores de eventos (lo que pasa cuando el usuario interactúa)
-    # ------------------------------------------------------------------
-    def _on_agregar_producto(self):
+        self.entry_stock.grid(row=4, column=1, padx=5, pady=5)
+
+        # Guardamos la referencia al botón porque su texto cambia
+        # ("Agregar producto" <-> "Actualizar producto") según el modo.
+        self.boton_guardar = tk.Button(
+            frame, text="Agregar producto", command=self._on_guardar_producto
+        )
+        self.boton_guardar.grid(row=5, column=0, pady=10)
+
+        self.boton_nuevo = tk.Button(
+            frame, text="Nuevo producto", command=self._on_nuevo_producto
+        )
+        self.boton_nuevo.grid(row=5, column=1, pady=10)
+
+        tk.Label(
+            contenedor,
+            text="Tip: hacé clic en un producto de la tabla para editarlo "
+                 "(por ejemplo, para reponer stock).",
+            fg="gray30",
+        ).pack(anchor="w", padx=10)
+
+        columnas = ("codigo", "nombre", "precio", "costo", "stock")
+        self.tabla_productos = ttk.Treeview(contenedor, columns=columnas, show="headings")
+        self.tabla_productos.heading("codigo", text="Código")
+        self.tabla_productos.heading("nombre", text="Producto")
+        self.tabla_productos.heading("precio", text="Precio")
+        self.tabla_productos.heading("costo", text="Costo")
+        self.tabla_productos.heading("stock", text="Stock")
+        self.tabla_productos.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Al seleccionar una fila, disparamos _on_seleccionar_producto
+        self.tabla_productos.bind("<<TreeviewSelect>>", self._on_seleccionar_producto)
+
+    def _on_guardar_producto(self):
+        """
+        Guarda el producto del formulario. Como 'agregar_producto' del
+        inventario sobreescribe si el código ya existe, este mismo método
+        sirve tanto para CREAR un producto nuevo como para ACTUALIZAR uno
+        existente (por ejemplo, para reponer stock).
+        """
+        codigo_texto = self.entry_codigo.get().strip()
         nombre = self.entry_nombre.get().strip()
         precio_texto = self.entry_precio.get().strip()
+        costo_texto = self.entry_costo.get().strip()
         stock_texto = self.entry_stock.get().strip()
- 
-        if not nombre or not precio_texto or not stock_texto:
-            messagebox.showwarning("Faltan datos", "Completá nombre, precio y stock.")
+
+        if not all([codigo_texto, nombre, precio_texto, costo_texto, stock_texto]):
+            messagebox.showwarning(
+                "Faltan datos", "Completá código, nombre, precio, costo y stock."
+            )
             return
- 
+
         try:
+            codigo = int(codigo_texto)
             precio = float(precio_texto)
+            costo = float(costo_texto)
             stock = int(stock_texto)
         except ValueError:
-            messagebox.showerror("Error", "El precio y el stock tienen que ser números.")
+            messagebox.showerror(
+                "Error",
+                "Código y stock deben ser enteros; precio y costo, números.",
+            )
             return
- 
-        # Acá la ventana NO guarda nada por su cuenta: le delega el trabajo al inventario.
-        self.inventario.agregar_producto(nombre, precio, stock)
-        self._refrescar_tabla()
- 
+
+        self.inventario.agregar_producto(codigo, nombre, precio, costo, stock)
+        self._refrescar_tabla_productos()
+        self._refrescar_combo_productos()
+        self._on_nuevo_producto()
+
+    def _on_seleccionar_producto(self, event):
+        """
+        Se dispara al hacer clic en una fila de la tabla de productos.
+        Precarga sus datos en el formulario para editarlos rápido
+        (por ejemplo, para sumar stock sin volver a tipear todo).
+        """
+        seleccion = self.tabla_productos.selection()
+        if not seleccion:
+            return
+
+        valores = self.tabla_productos.item(seleccion[0], "values")
+        codigo = int(valores[0])
+        producto = self.inventario.obtener_producto_por_codigo(codigo)
+
+        # El código se bloquea: es la clave del producto, y si se pudiera
+        # cambiar libremente acá se terminaría creando un producto nuevo
+        # en lugar de editar el existente.
+        self.entry_codigo.config(state="normal")
+        self.entry_codigo.delete(0, tk.END)
+        self.entry_codigo.insert(0, producto.codigo)
+        self.entry_codigo.config(state="disabled")
+
+        self.entry_nombre.delete(0, tk.END)
+        self.entry_nombre.insert(0, producto.nombre)
+
+        self.entry_precio.delete(0, tk.END)
+        self.entry_precio.insert(0, producto.precio)
+
+        self.entry_costo.delete(0, tk.END)
+        self.entry_costo.insert(0, producto.costo)
+
+        self.entry_stock.delete(0, tk.END)
+        self.entry_stock.insert(0, producto.stock)
+
+        self.boton_guardar.config(text="Actualizar producto")
+
+    def _on_nuevo_producto(self):
+        """Limpia el formulario y lo deja listo para cargar un producto nuevo."""
+        self.tabla_productos.selection_remove(self.tabla_productos.selection())
+
+        self.entry_codigo.config(state="normal")
+        self.entry_codigo.delete(0, tk.END)
         self.entry_nombre.delete(0, tk.END)
         self.entry_precio.delete(0, tk.END)
+        self.entry_costo.delete(0, tk.END)
         self.entry_stock.delete(0, tk.END)
-        self.entry_nombre.focus()
- 
-    def _refrescar_tabla(self):
-        for fila in self.tabla.get_children():
-            self.tabla.delete(fila)
+
+        self.boton_guardar.config(text="Agregar producto")
+        self.entry_codigo.focus()
+
+    def _refrescar_tabla_productos(self):
+        for fila in self.tabla_productos.get_children():
+            self.tabla_productos.delete(fila)
         for producto in self.inventario.obtener_todos():
-            self.tabla.insert(
+            self.tabla_productos.insert(
                 "", tk.END,
-                values=(producto.nombre, f"${producto.precio:.2f}", producto.stock)
+                values=(
+                    producto.codigo,
+                    producto.nombre,
+                    f"${producto.precio:.2f}",
+                    f"${producto.costo:.2f}",
+                    producto.stock,
+                ),
             )
- 
+
+    # ==================================================================
+    # PESTAÑA: VENTAS
+    # ==================================================================
+    def _crear_tab_ventas(self, contenedor):
+        frame = tk.Frame(contenedor, padx=10, pady=10)
+        frame.pack(fill="x")
+
+        tk.Label(frame, text="Producto:").grid(row=0, column=0, sticky="w")
+        self.combo_productos = ttk.Combobox(frame, width=35, state="readonly")
+        self.combo_productos.grid(row=0, column=1, padx=5, pady=5)
+
+        tk.Label(frame, text="Cantidad:").grid(row=1, column=0, sticky="w")
+        self.entry_cantidad = tk.Entry(frame, width=10)
+        self.entry_cantidad.grid(row=1, column=1, sticky="w", padx=5, pady=5)
+
+        boton = tk.Button(frame, text="Registrar venta", command=self._on_registrar_venta)
+        boton.grid(row=2, column=0, columnspan=2, pady=10)
+
+        columnas = ("codigo", "nombre", "cantidad", "precio", "total", "ganancia")
+        self.tabla_ventas = ttk.Treeview(contenedor, columns=columnas, show="headings")
+        self.tabla_ventas.heading("codigo", text="Código")
+        self.tabla_ventas.heading("nombre", text="Producto")
+        self.tabla_ventas.heading("cantidad", text="Cant.")
+        self.tabla_ventas.heading("precio", text="Precio unit.")
+        self.tabla_ventas.heading("total", text="Total")
+        self.tabla_ventas.heading("ganancia", text="Ganancia")
+        self.tabla_ventas.pack(fill="both", expand=True, padx=10, pady=10)
+
+        self.label_totales = tk.Label(
+            contenedor, text="Vendido: $0.00   |   Ganancia: $0.00", font=("", 10, "bold")
+        )
+        self.label_totales.pack(pady=5)
+
+    def _on_cambio_pestania(self, event):
+        self._refrescar_combo_productos()
+
+    def _refrescar_combo_productos(self):
+        """Vuelve a armar la lista del combobox con los productos actuales."""
+        self._productos_combo = self.inventario.obtener_todos()
+        self.combo_productos["values"] = [
+            f"{p.codigo} - {p.nombre} (stock: {p.stock})" for p in self._productos_combo
+        ]
+
+    def _on_registrar_venta(self):
+        indice = self.combo_productos.current()
+        if indice < 0:
+            messagebox.showwarning("Falta el producto", "Elegí un producto de la lista.")
+            return
+
+        cantidad_texto = self.entry_cantidad.get().strip()
+        if not cantidad_texto:
+            messagebox.showwarning("Falta la cantidad", "Ingresá la cantidad vendida.")
+            return
+
+        try:
+            cantidad = int(cantidad_texto)
+            if cantidad <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Error", "La cantidad debe ser un número entero mayor a 0.")
+            return
+
+        producto = self._productos_combo[indice]
+
+        try:
+            self.caja.registrar_venta(producto.codigo, cantidad)
+        except StockInsuficiente as error:
+            messagebox.showerror("Stock insuficiente", str(error))
+            return
+
+        self._refrescar_tabla_ventas()
+        self._refrescar_tabla_productos()
+        self._refrescar_combo_productos()
+        self.entry_cantidad.delete(0, tk.END)
+
+    def _refrescar_tabla_ventas(self):
+        for fila in self.tabla_ventas.get_children():
+            self.tabla_ventas.delete(fila)
+        for venta in self.caja.obtener_ventas():
+            self.tabla_ventas.insert(
+                "", tk.END,
+                values=(
+                    venta.codigo,
+                    venta.nombre,
+                    venta.cantidad,
+                    f"${venta.precio_unitario:.2f}",
+                    f"${venta.total:.2f}",
+                    f"${venta.ganancia:.2f}",
+                ),
+            )
+        self.label_totales.config(
+            text=(
+                f"Vendido: ${self.caja.total_vendido():.2f}   |   "
+                f"Ganancia: ${self.caja.total_ganancia():.2f}"
+            )
+        )
