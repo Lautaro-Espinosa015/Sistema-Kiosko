@@ -2,6 +2,14 @@
 
 from dataclasses import dataclass
 
+# Tipos de producto posibles: por unidad (ej: alfajor, gaseosa)
+# o por peso (ej: verdura, pan, fiambre). Define si el stock/cantidad
+# se maneja como número entero o con decimales (kg).
+TIPOS_PRODUCTO = ("Unidad", "Peso (Kg)")
+
+# Formas de pago que acepta el kiosko al registrar una venta.
+FORMAS_PAGO = ("Efectivo", "Transferencia")
+
 
 @dataclass
 class Producto:
@@ -9,9 +17,11 @@ class Producto:
 
     codigo: int
     nombre: str
-    precio: float
-    costo: float
-    stock: int
+    categoria: str
+    tipo: str       # uno de TIPOS_PRODUCTO
+    precio: float   # precio por unidad, o por kg si tipo == "Peso (Kg)"
+    costo: float    # costo por unidad, o por kg
+    stock: float    # cantidad de unidades, o kilos disponibles
 
 
 @dataclass
@@ -20,9 +30,12 @@ class Venta:
 
     codigo: int
     nombre: str
-    cantidad: int
+    categoria: str
+    tipo: str        # copiado del producto, para saber si cantidad es entera o en kg
+    cantidad: float
     precio_unitario: float
     costo_unitario: float
+    forma_pago: str  # uno de FORMAS_PAGO
 
     @property
     def total(self) -> float:

@@ -1,5 +1,5 @@
 """Módulo que coordina las ventas del día: valida stock, lo descuenta,
-guarda cada venta y calcula los totales (vendido y ganancia)."""
+guarda cada venta (con su forma de pago) y calcula los totales."""
 
 from inventario import Inventario
 from modelos import Venta
@@ -20,13 +20,13 @@ class Caja:
         self.inventario = inventario
         self._ventas: list[Venta] = []
 
-    def registrar_venta(self, codigo: int, cantidad: int) -> Venta:
+    def registrar_venta(self, codigo: int, cantidad: float, forma_pago: str) -> Venta:
         """
         Registra una venta:
         1) busca el producto por código,
         2) valida que haya stock suficiente,
         3) descuenta el stock,
-        4) guarda la venta y la devuelve.
+        4) guarda la venta (con su forma de pago) y la devuelve.
         """
         if not self.inventario.existe(codigo):
             raise KeyError(f"No existe ningún producto con código {codigo}.")
@@ -44,19 +44,20 @@ class Caja:
         venta = Venta(
             codigo=producto.codigo,
             nombre=producto.nombre,
+            categoria=producto.categoria,
+            tipo=producto.tipo,
             cantidad=cantidad,
             precio_unitario=producto.precio,
             costo_unitario=producto.costo,
+            forma_pago=forma_pago,
         )
         self._ventas.append(venta)
         return venta
 
     def agregar_venta_existente(self, venta: Venta) -> None:
         """
-        Agrega una venta que ya había sido validada anteriormente
-        (por ejemplo, al cargar el historial del día desde el Excel).
-        A diferencia de 'registrar_venta', NO vuelve a descontar stock,
-        porque el stock guardado en el Excel ya refleja esa venta.
+        Agrega una venta ya validada anteriormente (por ejemplo, al cargar
+        el historial del día desde el Excel), sin volver a descontar stock.
         """
         self._ventas.append(venta)
 
@@ -75,3 +76,16 @@ class Caja:
     def cantidad_operaciones(self) -> int:
         """Cuántas ventas se registraron en el día."""
         return len(self._ventas)
+    # En caja.py, dentro de class Caja:
+
+    def limpiar_ventas(self) -> None:
+        """Vacía la lista de ventas de la caja activa sin tocar el inventario."""
+        self._ventas.clear()
+
+    def total_por_forma_pago(self) -> dict[str, float]:
+        """Total vendido, agrupado por forma de pago (ej: Efectivo, Transferencia)."""
+        totales: dict[str, float] = {}
+        for venta in self._ventas:
+            totales[venta.forma_pago] = totales.get(venta.forma_pago, 0.0) + venta.total
+        return totales
+    
